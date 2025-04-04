@@ -439,8 +439,85 @@ Each stage variable can be used in the **Integrations** settings to refer specif
 
 These are technical specifications of an API. Can be used like CloudFormation but for API. Specification can be exported from the API GW and a new one can be created using it.
 
-# 1.7  NOSQL Databases & DynamoDB 
+# 1.7  Elastic Beanstalk In-Depth 
 
-## 1.7.1 ElastiCache Theory & Architecture 
+## 1.7.1 Elastic Beanstalk Architecture
 
+### 1.7.1.1 Key Points
+- Beanstalk is a platform (PaaS) that manage all other AWS services to let you focus on the code and application
+- Under the hood it uses SQS, EC2, ECS etc. and its fully customizable
+
+### 1.7.1.2 Platforms
+- Beanstalk uses a concept of platforms
+- Currently supported platforms are:
+    - Python, Ruby, Go, .Net, .Net Core, Java SE, Tomcat, 
+    - Docker (single container and multi container)
+    - Custom via packer (you can create your custom platform)
+
+### 1.7.1.3 Application
+- **APPLICATION** - In Beanstalk terms, this refers to the entire infrastructure and setup for running an app, rather than just the actual application code. It’s a collection of resources (like folders, containers, etc.) related to the application.
+    - **ENVIRONMENT** - Inside an application, you have environments that store the services and settings required to run the app and they use platforms to run. Environments represent different stages (e.g., dev, staging, prod) or instances (e.g. processing env) of the application.
+        - **APPLICATION VERSIONS** - They are specific labeled versions of **deployable code** for an application used in environments. The source bundle is stored in S3.
+        - **DON'T PUT DB IN ENV:** Environments can use blue green deployments, AB testing and CNAME swap. In this case, database would be lost when one env is discarded. Create DB outside the Beanstalk instead.
+
+### 1.7.1.4 Deployment Policies
+Application versions can use different deployment type:
+1. **ALL AT ONCE** - Deploy to all instances at once. Brief outage. After deployment, either everything is good, or everything is bad. Not really good for production.
+2. **ROLLING** - Step by step. Only moves to next when previous is successfull. Goes instance by instance. For this you can setup batch size to control the amount of instances updated at the same time.
+3. **ROLLING WITH BATCH** - In Rolling with batch deployment, the system deploys new application versions without taking down any instances. This strategy is designed to ensure that there is no downtime during the deployment process by maintaining the capacity throughout.
+    - The key idea is to deploy a new batch of instances (e.g., 2 new instances) while maintaining the required capacity.
+    - Batch size: When you set the batch size to 2, Elastic Beanstalk will first launch 2 new instances with the new version of the application, ensuring that the capacity is maintained.
+    - After these 2 new instances are running with the new version, the system will update 2 instances from the existing pool (the old version), replacing them with the new version.
+
+    This results in a rolling update where:
+
+    ```
+    2 instances are running with the new version,
+    2 instances are still running with the old version,
+    2 instances are redundantly running with the new version (since the new ones were launched in the first batch).
+    ```
+    At the end, additional instances are removed. This option is slower and more expensive but it's safer thus good for production usage.
+
+4. **IMMUTABLE** - New instances are created, and if they're healthy, the old instances are then removed. Most expensive option since it doubles the amount of instances during deployment. 
+5. **TRAFFIC SPLITTING** - Fresh instances with traffic split. Adds an A/B testing aspect to the immutable strategy before removing old instances.
+6. **BLUE GREEN** (not actual deployment policy) - Manual deployment strategy where you prepare two separate environments with two different application versions. Thanks to this you have full control over the two environments. CNAME swap can be used to point the DNS name at desired environment.
+
+### 1.7.1.5 Decoupling RDS instance existing in application environment
+1. **Create an RDS snapshot** – Backup the database to ensure data safety.
+
+2. **Enable Delete Protection** – Prevent accidental deletion of the RDS instance.
+
+3. **Create a new environment** – Deploy a new Elastic Beanstalk environment with the same application version, but without an attached RDS.
+
+4. **Ensure connectivity** – Configure the new environment to connect to the existing standalone RDS instance (adjust security groups if needed).
+
+5. **Swap environments** – Perform a CNAME swap (DNS update) to redirect traffic to the new environment.
+
+6. **Delete the old environment** – Once everything is confirmed working, remove the old Beanstalk environment (without deleting the standalone RDS).
+
+### 1.7.1.6 Customizing with .ebextensions
+Extension is a folder inside the ZIP/WAR application version package. 
+- Folder should be called .ebextensions
+- Add YAML or JSON files to it ending with .config 
+- Use CFN format to add resources in the envrionment
+
+### 1.7.1.7 HTTPS
+Two ways to enable HTTPS in Elastic Beanstalk:
+1. **Apply the certificate directly in the Load Balancer**
+
+    Go to EB Console → Environment → Load Balancer Configuration and attach an SSL certificate.
+
+2. **Configure it via .ebextensions**
+
+    Use configuration files (.ebextensions) to automate SSL setup during deployment.
+
+✅ Note: Ensure security groups allow HTTPS traffic and that the Load Balancer can communicate securely with EC2 instances.
+
+### 1.7.1.8 EB and Docker
+#### Single Docker
+- Uses single EC2 instance with Docker instead ECS
+- It can create containers in the environment based only on the provided Dockerfile
+
+#### Multi-container Docker
+- Uses ECS + Load Balancer
 

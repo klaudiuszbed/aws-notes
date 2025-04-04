@@ -3417,7 +3417,7 @@ When using strongly consistent reads, reads are always performed on Leader Stora
 - Stream = Time ordered list of of item changes. Every time the item is changed, this information is saved and stored chronologically. 
 - Streams have 24-hour rolling window.
 - Enabled per table.
-- Streams record **Inserts, Updated, Deletes**
+- Streams record **Inserts, Updates, Deletes**
 - Provides different **view types** which influence what is in the stream
     - **KEYS_ONLY**: only changes to PK and SK. 
     - **NEW_IMAGE**: stores new, updated item
